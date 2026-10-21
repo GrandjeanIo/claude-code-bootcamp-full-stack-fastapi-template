@@ -93,9 +93,12 @@ def update_user_me(
                 status_code=409, detail="User with this email already exists"
             )
     user_data = user_in.model_dump(exclude_unset=True)
+    previous_name = current_user.full_name
     current_user.sqlmodel_update(user_data)
     session.add(current_user)
     session.commit()
+    if current_user.full_name and current_user.full_name != previous_name:
+        crud.mark_name_edited(session=session, user_id=current_user.id)
     session.refresh(current_user)
     return current_user
 
