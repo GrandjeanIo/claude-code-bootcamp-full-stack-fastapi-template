@@ -62,6 +62,7 @@ services:
     # TODO: remove once coverage is done locally
     volumes:
       - ./backend/htmlcov:/app/backend/htmlcov
+      - ./backend/tests:/app/backend/tests
     environment:
       FASTAPI_ENV: "development"
       SMTP_HOST: "mailpit"
