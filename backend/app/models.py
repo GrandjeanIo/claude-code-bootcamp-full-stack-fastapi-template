@@ -131,6 +131,10 @@ class OnboardingPublic(SQLModel):
     completed: bool
 
 
+class OnboardingInvite(SQLModel):
+    email: EmailStr = Field(max_length=255)
+
+
 # Generic message
 class Message(SQLModel):
     message: str

@@ -98,6 +98,13 @@ def mark_name_edited(*, session: Session, user_id: uuid.UUID) -> None:
     _mark_step(session=session, user_id=user_id, step="name_edited_at")
 
 
+def mark_invite_sent(*, session: Session, onboarding: Onboarding) -> None:
+    onboarding.invite_count += 1
+    session.add(onboarding)
+    session.commit()
+    _mark_step(session=session, user_id=onboarding.user_id, step="invite_sent_at")
+
+
 def completed_within(
     created_at: datetime, completed_at: datetime | None, days: int = 7
 ) -> bool:

@@ -102,6 +102,19 @@ def generate_new_account_email(
     return EmailData(html_content=html_content, subject=subject)
 
 
+def generate_invite_email() -> EmailData:
+    project_name = settings.PROJECT_NAME
+    subject = f"{project_name} - You're invited"
+    html_content = render_email_template(
+        template_name="invite.html",
+        context={
+            "project_name": settings.PROJECT_NAME,
+            "link": f"{settings.FRONTEND_HOST}/signup",
+        },
+    )
+    return EmailData(html_content=html_content, subject=subject)
+
+
 def generate_password_reset_token(email: str) -> str:
     delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
     now = datetime.now(UTC)
