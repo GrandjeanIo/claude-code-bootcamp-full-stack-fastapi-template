@@ -78,9 +78,18 @@ def create_onboarding(*, session: Session, user_id: uuid.UUID) -> Onboarding:
 
 
 def _mark_step(*, session: Session, user_id: uuid.UUID, step: str) -> None:
-    # First timestamp wins; users without a row are not onboarding.
+    # Users without a row are not onboarding.
     onboarding = session.get(Onboarding, user_id)
-    if onboarding is None or getattr(onboarding, step) is not None:
+    if onboarding is None:
+        return
+    _set_step(onboarding=onboarding, step=step)
+    session.add(onboarding)
+    session.commit()
+
+
+def _set_step(*, onboarding: Onboarding, step: str) -> None:
+    # First timestamp wins.
+    if getattr(onboarding, step) is not None:
         return
     setattr(onboarding, step, datetime.now(UTC))
     steps = [
@@ -94,8 +103,6 @@ def _mark_step(*, session: Session, user_id: uuid.UUID, step: str) -> None:
     ]
     if len(steps) == 3:
         onboarding.completed_at = max(steps)
-    session.add(onboarding)
-    session.commit()
 
 
 def mark_first_item(*, session: Session, user_id: uuid.UUID) -> None:
@@ -106,11 +113,22 @@ def mark_name_edited(*, session: Session, user_id: uuid.UUID) -> None:
     _mark_step(session=session, user_id=user_id, step="name_edited_at")
 
 
+def lock_onboarding(*, session: Session, user_id: uuid.UUID) -> Onboarding | None:
+    """
+    Read a user's onboarding row and lock it until the session's transaction
+    ends, so concurrent invites check and increment the count one at a time.
+    """
+    statement = (
+        select(Onboarding).where(Onboarding.user_id == user_id).with_for_update()
+    )
+    return session.exec(statement).first()
+
+
 def mark_invite_sent(*, session: Session, onboarding: Onboarding) -> None:
     onboarding.invite_count += 1
+    _set_step(onboarding=onboarding, step="invite_sent_at")
     session.add(onboarding)
     session.commit()
-    _mark_step(session=session, user_id=onboarding.user_id, step="invite_sent_at")
 
 
 def completed_within(
