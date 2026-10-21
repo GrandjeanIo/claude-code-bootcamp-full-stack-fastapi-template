@@ -1,4 +1,4 @@
-# Full Stack FastAPI Template
+# Full Stack FastAPI Template (FORK for Claude Code Bootcamp - do not use)
 
 [![Test Docker Compose](../../actions/workflows/test-docker-compose.yml/badge.svg)](../../actions/workflows/test-docker-compose.yml)
 [![Test Backend](../../actions/workflows/test-backend.yml/badge.svg)](../../actions/workflows/test-backend.yml)
