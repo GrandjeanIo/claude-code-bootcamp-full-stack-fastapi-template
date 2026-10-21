@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 
+import OnboardingChecklist from "@/components/Onboarding/OnboardingChecklist"
 import useAuth from "@/hooks/useAuth"
 
 export const Route = createFileRoute("/_layout/")({
@@ -26,6 +27,7 @@ function Dashboard() {
           Welcome back, nice to see you again!!!
         </p>
       </div>
+      <OnboardingChecklist />
     </div>
   )
 }
