@@ -133,7 +133,7 @@ function OnboardingStatsPage() {
           />
           <Stat
             label="Completion rate"
-            value={`${Math.round(stats.completion_rate * 1000) / 10}%`}
+            value={`${Math.round(stats.completion_rate * 100) / 10}%`}
             testId="stat-rate"
           />
         </dl>
