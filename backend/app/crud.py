@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlmodel import Session, select
@@ -66,6 +67,43 @@ def create_onboarding(*, session: Session, user_id: uuid.UUID) -> Onboarding:
     session.commit()
     session.refresh(db_obj)
     return db_obj
+
+
+def _mark_step(*, session: Session, user_id: uuid.UUID, step: str) -> None:
+    # First timestamp wins; users without a row are not onboarding.
+    onboarding = session.get(Onboarding, user_id)
+    if onboarding is None or getattr(onboarding, step) is not None:
+        return
+    setattr(onboarding, step, datetime.now(UTC))
+    steps = [
+        at
+        for at in (
+            onboarding.first_item_at,
+            onboarding.name_edited_at,
+            onboarding.invite_sent_at,
+        )
+        if at is not None
+    ]
+    if len(steps) == 3:
+        onboarding.completed_at = max(steps)
+    session.add(onboarding)
+    session.commit()
+
+
+def mark_first_item(*, session: Session, user_id: uuid.UUID) -> None:
+    _mark_step(session=session, user_id=user_id, step="first_item_at")
+
+
+def mark_name_edited(*, session: Session, user_id: uuid.UUID) -> None:
+    _mark_step(session=session, user_id=user_id, step="name_edited_at")
+
+
+def completed_within(
+    created_at: datetime, completed_at: datetime | None, days: int = 7
+) -> bool:
+    if completed_at is None:
+        return False
+    return completed_at - created_at <= timedelta(days=days)
 
 
 def create_item(*, session: Session, item_in: ItemCreate, owner_id: uuid.UUID) -> Item:
