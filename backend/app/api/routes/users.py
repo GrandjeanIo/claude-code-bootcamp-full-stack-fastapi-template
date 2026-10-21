@@ -156,6 +156,7 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
         )
     user_create = UserCreate.model_validate(user_in)
     user = crud.create_user(session=session, user_create=user_create)
+    crud.create_onboarding(session=session, user_id=user.id)
     return user
 
 
