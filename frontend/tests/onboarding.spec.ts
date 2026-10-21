@@ -1,7 +1,7 @@
-import { expect, type Page, test } from "@playwright/test"
+import { type Browser, expect, type Page, test } from "@playwright/test"
 import { createUser } from "./utils/privateApi"
 import { randomEmail, randomItemTitle, randomPassword } from "./utils/random"
-import { logInUser, logOutUser, signUpNewUser } from "./utils/user"
+import { logInUser, logOutUser } from "./utils/user"
 
 const steps = {
   firstItem: "Create your first item",
@@ -32,9 +32,21 @@ async function editName(page: Page) {
   await expect(page.getByText("User updated successfully")).toBeVisible()
 }
 
+async function signUp(page: Page, email: string, password: string) {
+  await page.goto("/signup")
+  await page.getByTestId("full-name-input").fill("Test User")
+  await page.getByTestId("email-input").fill(email)
+  await page.getByTestId("password-input").fill(password)
+  await page.getByTestId("confirm-password-input").fill(password)
+  await page.getByRole("button", { name: "Sign Up" }).click()
+  await expect(page).toHaveURL(/\/login$/)
+}
+
 async function invite(page: Page, email: string) {
   await page.getByLabel("Email to invite").fill(email)
+  const response = page.waitForResponse("**/api/v1/onboarding/invite")
   await page.getByRole("button", { name: "Send invite" }).click()
+  await response
 }
 
 test("User without onboarding record sees no checklist", async ({ page }) => {
@@ -53,13 +65,7 @@ test.describe("Onboarding checklist", () => {
   test.beforeEach(async ({ page }) => {
     email = randomEmail()
     password = randomPassword()
-    await page.goto("/signup")
-    await page.getByTestId("full-name-input").fill("Test User")
-    await page.getByTestId("email-input").fill(email)
-    await page.getByTestId("password-input").fill(password)
-    await page.getByTestId("confirm-password-input").fill(password)
-    await page.getByRole("button", { name: "Sign Up" }).click()
-    await expect(page).toHaveURL(/\/login$/)
+    await signUp(page, email, password)
     await logInUser(page, email, password)
   })
 
@@ -141,6 +147,15 @@ const daysAgo = (days: number) => {
   return d
 }
 
+async function signUpInFreshContext(browser: Browser) {
+  const context = await browser.newContext({
+    storageState: { cookies: [], origins: [] },
+  })
+  const newUser = await context.newPage()
+  await signUp(newUser, randomEmail(), randomPassword())
+  await context.close()
+}
+
 test.describe("Onboarding stats page", () => {
   test("Superuser opens the stats page from the sidebar", async ({ page }) => {
     await page.goto("/")
@@ -156,28 +171,30 @@ test.describe("Onboarding stats page", () => {
     page,
     browser,
   }) => {
-    const context = await browser.newContext({
-      storageState: { cookies: [], origins: [] },
-    })
-    const newUser = await context.newPage()
-    await signUpNewUser(newUser, "Stats User", randomEmail(), randomPassword())
-    await context.close()
-
+    await signUpInFreshContext(browser)
     await page.goto("/onboarding")
 
-    await expect(page.getByLabel("From")).toHaveValue(localDate(daysAgo(30)))
-    await expect(page.getByLabel("To")).toHaveValue(localDate(new Date()))
+    await expect(page.getByLabel("From", { exact: true })).toHaveValue(
+      localDate(daysAgo(30)),
+    )
+    await expect(page.getByLabel("To", { exact: true })).toHaveValue(
+      localDate(new Date()),
+    )
     await expect(page.getByTestId("stat-registered")).toHaveText(/^[1-9]\d*$/)
     await expect(page.getByTestId("stat-completed")).toHaveText(/^\d+$/)
     await expect(page.getByTestId("stat-rate")).toHaveText(/^\d+(\.\d)?%$/)
   })
 
-  test("Changing the date range updates the numbers", async ({ page }) => {
+  test("Changing the date range updates the numbers", async ({
+    page,
+    browser,
+  }) => {
+    await signUpInFreshContext(browser)
     await page.goto("/onboarding")
     await expect(page.getByTestId("stat-registered")).toHaveText(/^[1-9]\d*$/)
 
-    await page.getByLabel("From").fill("2000-01-01")
-    await page.getByLabel("To").fill("2000-01-31")
+    await page.getByLabel("From", { exact: true }).fill("2000-01-01")
+    await page.getByLabel("To", { exact: true }).fill("2000-01-31")
 
     await expect(page.getByTestId("stat-registered")).toHaveText("0")
     await expect(page.getByTestId("stat-completed")).toHaveText("0")
@@ -190,10 +207,10 @@ test.describe("Onboarding stats page", () => {
     await page.goto("/onboarding")
     await expect(page.getByText(understatedNote)).toBeVisible()
 
-    await page.getByLabel("To").fill(localDate(daysAgo(10)))
+    await page.getByLabel("To", { exact: true }).fill(localDate(daysAgo(10)))
     await expect(page.getByText(understatedNote)).not.toBeVisible()
 
-    await page.getByLabel("To").fill(localDate(daysAgo(3)))
+    await page.getByLabel("To", { exact: true }).fill(localDate(daysAgo(3)))
     await expect(page.getByText(understatedNote)).toBeVisible()
   })
 })
