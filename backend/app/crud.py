@@ -2,10 +2,18 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.core.security import get_password_hash, verify_password
-from app.models import Item, ItemCreate, Onboarding, User, UserCreate, UserUpdate
+from app.models import (
+    Item,
+    ItemCreate,
+    Onboarding,
+    OnboardingStats,
+    User,
+    UserCreate,
+    UserUpdate,
+)
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
@@ -111,6 +119,29 @@ def completed_within(
     if completed_at is None:
         return False
     return completed_at - created_at <= timedelta(days=days)
+
+
+def get_onboarding_stats(
+    *, session: Session, start: datetime, end: datetime
+) -> OnboardingStats:
+    # Only users with an onboarding row (self-signups) count.
+    statement = (
+        select(User.created_at, Onboarding.completed_at)
+        .join(Onboarding, col(Onboarding.user_id) == col(User.id))
+        .where(col(User.created_at) >= start, col(User.created_at) < end)
+    )
+    rows = session.exec(statement).all()
+    registered = len(rows)
+    completed = sum(
+        1
+        for created_at, completed_at in rows
+        if created_at is not None and completed_within(created_at, completed_at)
+    )
+    return OnboardingStats(
+        registered=registered,
+        completed_within_7d=completed,
+        completion_rate=completed / registered if registered else 0,
+    )
 
 
 def create_item(*, session: Session, item_in: ItemCreate, owner_id: uuid.UUID) -> Item:

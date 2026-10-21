@@ -1,16 +1,24 @@
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app import crud
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core.config import settings
-from app.models import Message, Onboarding, OnboardingInvite, OnboardingPublic
+from app.models import (
+    Message,
+    Onboarding,
+    OnboardingInvite,
+    OnboardingPublic,
+    OnboardingStats,
+)
 from app.utils import generate_invite_email, send_email
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 MAX_INVITES = 5
+STATS_DEFAULT_DAYS = 30
 
 
 @router.get("/me", response_model=OnboardingPublic)
@@ -53,3 +61,20 @@ def send_invite(
     )
     crud.mark_invite_sent(session=session, onboarding=onboarding)
     return Message(message="Invitation sent")
+
+
+@router.get(
+    "/stats",
+    response_model=OnboardingStats,
+    dependencies=[Depends(get_current_active_superuser)],
+)
+def read_onboarding_stats(
+    session: SessionDep, start: datetime | None = None, end: datetime | None = None
+) -> Any:
+    """
+    Onboarding metrics for users registered in [start, end). Defaults to the
+    last 30 days.
+    """
+    end = end or datetime.now(UTC)
+    start = start or end - timedelta(days=STATS_DEFAULT_DAYS)
+    return crud.get_onboarding_stats(session=session, start=start, end=end)
