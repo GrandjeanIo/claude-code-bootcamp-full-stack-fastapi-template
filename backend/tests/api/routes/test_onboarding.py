@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from smtplib import SMTPException
 from typing import Any
 from unittest.mock import patch
@@ -10,7 +10,7 @@ from sqlmodel import Session, SQLModel, select
 
 from app import crud
 from app.core.config import settings
-from app.models import Onboarding
+from app.models import Onboarding, User, UserCreate
 from tests.utils.utils import random_email, random_lower_string
 
 
@@ -437,3 +437,138 @@ def test_invite_requires_authentication(client: TestClient) -> None:
 
     assert r.status_code in (401, 403)
     send_email.assert_not_called()
+
+
+def _stats(
+    client: TestClient, headers: dict[str, str], **params: str
+) -> dict[str, Any]:
+    r = client.get(
+        f"{settings.API_V1_STR}/onboarding/stats", headers=headers, params=params
+    )
+    assert r.status_code == 200
+    return r.json()  # type: ignore[no-any-return]
+
+
+def test_stats_default_window_counts_recent_signups(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    before = _stats(client, superuser_token_headers)
+    _signup_and_login(client)
+    after = _stats(client, superuser_token_headers)
+
+    assert set(after) == {"registered", "completed_within_7d", "completion_rate"}
+    assert after["registered"] == before["registered"] + 1
+
+
+def test_stats_refused_for_normal_user(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    r = client.get(
+        f"{settings.API_V1_STR}/onboarding/stats", headers=normal_user_token_headers
+    )
+    assert r.status_code == 403
+
+
+def test_stats_requires_authentication(client: TestClient) -> None:
+    r = client.get(f"{settings.API_V1_STR}/onboarding/stats")
+    assert r.status_code == 401
+
+
+def _registered_at(
+    client: TestClient,
+    db: Session,
+    created_at: datetime,
+    completed_at: datetime | None = None,
+) -> None:
+    """Sign up a user, then backdate registration and set step times."""
+    user_id, _ = _signup_and_login(client)
+    onboarding = _onboarding_rows(db, user_id)[0]
+    user = db.get(User, onboarding.user_id)
+    assert user
+    user.created_at = created_at
+    db.add(user)
+    onboarding.first_item_at = created_at
+    onboarding.name_edited_at = created_at
+    # Without completed_at the invite step is left undone.
+    onboarding.invite_sent_at = completed_at
+    onboarding.completed_at = completed_at
+    db.add(onboarding)
+    db.commit()
+
+
+def _window(year: int) -> dict[str, str]:
+    return {
+        "start": datetime(year, 1, 1, tzinfo=UTC).isoformat(),
+        "end": datetime(year, 2, 1, tzinfo=UTC).isoformat(),
+    }
+
+
+def test_stats_window_includes_start_and_excludes_end(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    _registered_at(client, db, datetime(2001, 1, 1, tzinfo=UTC))
+    _registered_at(client, db, datetime(2001, 2, 1, tzinfo=UTC))
+
+    stats = _stats(client, superuser_token_headers, **_window(2001))
+
+    assert stats["registered"] == 1
+
+
+def test_stats_counts_completion_up_to_exactly_seven_days(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    registered = datetime(2002, 1, 10, 12, 0, tzinfo=UTC)
+    _registered_at(client, db, registered, registered + timedelta(days=7))
+    _registered_at(
+        client, db, registered, registered + timedelta(days=7, microseconds=1)
+    )
+
+    stats = _stats(client, superuser_token_headers, **_window(2002))
+
+    assert stats == {
+        "registered": 2,
+        "completed_within_7d": 1,
+        "completion_rate": 0.5,
+    }
+
+
+def test_stats_does_not_count_incomplete_onboarding(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    _registered_at(client, db, datetime(2003, 1, 10, tzinfo=UTC))
+
+    stats = _stats(client, superuser_token_headers, **_window(2003))
+
+    assert stats == {
+        "registered": 1,
+        "completed_within_7d": 0,
+        "completion_rate": 0,
+    }
+
+
+def test_stats_rate_is_zero_when_nobody_registered(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    stats = _stats(client, superuser_token_headers, **_window(1990))
+
+    assert stats == {
+        "registered": 0,
+        "completed_within_7d": 0,
+        "completion_rate": 0,
+    }
+
+
+def test_stats_excludes_users_without_onboarding_record(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    user = crud.create_user(
+        session=db,
+        user_create=UserCreate(email=random_email(), password=random_lower_string()),
+    )
+    user.created_at = datetime(2004, 1, 10, tzinfo=UTC)
+    db.add(user)
+    db.commit()
+
+    stats = _stats(client, superuser_token_headers, **_window(2004))
+
+    assert stats["registered"] == 0

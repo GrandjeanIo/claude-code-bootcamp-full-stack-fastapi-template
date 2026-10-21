@@ -135,6 +135,12 @@ class OnboardingInvite(SQLModel):
     email: EmailStr = Field(max_length=255)
 
 
+class OnboardingStats(SQLModel):
+    registered: int
+    completed_within_7d: int
+    completion_rate: float
+
+
 # Generic message
 class Message(SQLModel):
     message: str

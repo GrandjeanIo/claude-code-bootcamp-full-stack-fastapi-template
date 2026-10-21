@@ -169,6 +169,24 @@ export type OnboardingPublic = {
 };
 
 /**
+ * OnboardingStats
+ */
+export type OnboardingStats = {
+    /**
+     * Registered
+     */
+    registered: number;
+    /**
+     * Completed Within 7D
+     */
+    completed_within_7d: number;
+    /**
+     * Completion Rate
+     */
+    completion_rate: number;
+};
+
+/**
  * PrivateUserCreate
  */
 export type PrivateUserCreate = {
@@ -993,6 +1011,40 @@ export type onboardingSendInviteResponses = {
 };
 
 export type onboardingSendInviteResponse = onboardingSendInviteResponses[keyof onboardingSendInviteResponses];
+
+export type onboardingReadOnboardingStatsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Start
+         */
+        start?: string | null;
+        /**
+         * End
+         */
+        end?: string | null;
+    };
+    url: '/api/v1/onboarding/stats';
+};
+
+export type onboardingReadOnboardingStatsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type onboardingReadOnboardingStatsError = onboardingReadOnboardingStatsErrors[keyof onboardingReadOnboardingStatsErrors];
+
+export type onboardingReadOnboardingStatsResponses = {
+    /**
+     * Successful Response
+     */
+    200: OnboardingStats;
+};
+
+export type onboardingReadOnboardingStatsResponse = onboardingReadOnboardingStatsResponses[keyof onboardingReadOnboardingStatsResponses];
 
 export type privateCreateUserData = {
     body: PrivateUserCreate;
