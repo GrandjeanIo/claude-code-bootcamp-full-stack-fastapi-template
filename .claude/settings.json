@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh *)",
+      "mcp__claude_ai_Linear__*",
+      "Bash(uv sync *)",
+      "Bash(bun install *)",
+      "Bash(uv run prek *)"
+    ]
+  }
+}
