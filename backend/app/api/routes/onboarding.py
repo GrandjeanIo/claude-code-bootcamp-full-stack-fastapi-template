@@ -13,7 +13,7 @@ from app.models import (
     OnboardingPublic,
     OnboardingStats,
 )
-from app.utils import generate_invite_email, send_email
+from app.utils import generate_invite_email, send_invite_email
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
@@ -44,7 +44,9 @@ def send_invite(
     """
     Invite someone by email. The address is never stored or logged.
     """
-    onboarding = session.get(Onboarding, current_user.id)
+    # Held from the cap check through the increment; released by the commit,
+    # or by the session closing when the request fails.
+    onboarding = crud.lock_onboarding(session=session, user_id=current_user.id)
     if onboarding is None:
         raise HTTPException(status_code=404, detail="Onboarding not found")
     if not settings.emails_enabled:
@@ -54,11 +56,13 @@ def send_invite(
     if onboarding.invite_count >= MAX_INVITES:
         raise HTTPException(status_code=429, detail="Invitation limit reached")
     email_data = generate_invite_email()
-    send_email(
+    sent = send_invite_email(
         email_to=body.email,
         subject=email_data.subject,
         html_content=email_data.html_content,
     )
+    if not sent:
+        raise HTTPException(status_code=502, detail="Invitation could not be sent")
     crud.mark_invite_sent(session=session, onboarding=onboarding)
     return Message(message="Invitation sent")
 
