@@ -75,3 +75,11 @@ New users see a 3-step checklist on the dashboard (first item, edit profile name
 
 ## Tickets
 <!-- filled by /to-tickets -->
+- FAS-1 https://linear.app/grandjean/issue/FAS-1/create-onboarding-record-at-signup
+- FAS-2 https://linear.app/grandjean/issue/FAS-2/capture-first-item-and-name-edit-steps-and-completion
+- FAS-3 https://linear.app/grandjean/issue/FAS-3/expose-own-onboarding-progress-via-get-onboardingme
+- FAS-4 https://linear.app/grandjean/issue/FAS-4/invite-someone-by-email-via-post-onboardinginvite
+- FAS-5 https://linear.app/grandjean/issue/FAS-5/superuser-onboarding-stats-via-get-onboardingstats
+- FAS-6 https://linear.app/grandjean/issue/FAS-6/onboarding-checklist-on-the-dashboard
+- FAS-7 https://linear.app/grandjean/issue/FAS-7/superuser-onboarding-stats-page
+- FAS-8 https://linear.app/grandjean/issue/FAS-8/end-to-end-test-for-onboarding-checklist-and-stats-page
