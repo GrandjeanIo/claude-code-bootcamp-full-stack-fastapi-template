@@ -1,8 +1,12 @@
+import logging
 from datetime import UTC, datetime
+from smtplib import SMTPException
 from typing import Any
+from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, select
+from sqlmodel import Session, SQLModel, select
 
 from app import crud
 from app.core.config import settings
@@ -55,8 +59,10 @@ def test_initial_superuser_has_no_onboarding(db: Session) -> None:
     assert _onboarding_rows(db, superuser.id) == []
 
 
-def _signup_and_login(client: TestClient) -> tuple[str, dict[str, str]]:
-    email = random_email()
+def _signup_and_login(
+    client: TestClient, email: str | None = None
+) -> tuple[str, dict[str, str]]:
+    email = email or random_email()
     password = random_lower_string()
     r = client.post(
         f"{settings.API_V1_STR}/users/signup",
@@ -286,3 +292,148 @@ def test_onboarding_me_requires_authentication(client: TestClient) -> None:
     r = client.get(f"{settings.API_V1_STR}/onboarding/me")
 
     assert r.status_code in (401, 403)
+
+
+def _invite(client: TestClient, headers: dict[str, str], email: str) -> Any:
+    return client.post(
+        f"{settings.API_V1_STR}/onboarding/invite",
+        headers=headers,
+        json={"email": email},
+    )
+
+
+def test_invite_sends_signup_link_and_marks_invite_sent(
+    client: TestClient, db: Session
+) -> None:
+    user_id, headers = _signup_and_login(client)
+    invitee = random_email()
+
+    with patch("app.api.routes.onboarding.send_email") as send_email:
+        r = _invite(client, headers, invitee)
+
+    assert r.status_code == 200
+    send_email.assert_called_once()
+    assert send_email.call_args.kwargs["email_to"] == invitee
+    assert (
+        f"{settings.FRONTEND_HOST}/signup"
+        in send_email.call_args.kwargs["html_content"]
+    )
+    assert _get_onboarding_me(client, headers).json()["invite_sent"] is True
+    assert _onboarding_rows(db, user_id)[0].invite_count == 1
+
+
+def test_invite_is_refused_when_emails_disabled(client: TestClient) -> None:
+    _, headers = _signup_and_login(client)
+
+    with (
+        patch("app.core.config.settings.SMTP_HOST", None),
+        patch("app.api.routes.onboarding.send_email") as send_email,
+    ):
+        r = _invite(client, headers, random_email())
+
+    assert r.status_code == 400
+    send_email.assert_not_called()
+
+
+def test_invite_to_own_address_is_refused_ignoring_case(client: TestClient) -> None:
+    own_email = random_email()
+    _, headers = _signup_and_login(client, own_email)
+
+    with patch("app.api.routes.onboarding.send_email") as send_email:
+        r = _invite(client, headers, own_email.upper())
+
+    assert r.status_code == 400
+    send_email.assert_not_called()
+
+
+def test_sixth_invite_is_rate_limited(client: TestClient) -> None:
+    _, headers = _signup_and_login(client)
+    with patch("app.api.routes.onboarding.send_email"):
+        for _ in range(5):
+            assert _invite(client, headers, random_email()).status_code == 200
+
+    with patch("app.api.routes.onboarding.send_email") as send_email:
+        r = _invite(client, headers, random_email())
+
+    assert r.status_code == 429
+    send_email.assert_not_called()
+
+
+def test_failed_send_leaves_invite_step_and_count_unchanged(
+    client: TestClient, db: Session
+) -> None:
+    user_id, headers = _signup_and_login(client)
+
+    with (
+        patch(
+            "app.api.routes.onboarding.send_email",
+            side_effect=SMTPException("send failed"),
+        ),
+        pytest.raises(SMTPException),
+    ):
+        _invite(client, headers, random_email())
+
+    onboarding = _onboarding_rows(db, user_id)[0]
+    assert onboarding.invite_sent_at is None
+    assert onboarding.invite_count == 0
+
+
+def test_invited_address_is_not_stored_or_logged(
+    client: TestClient, db: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    _, headers = _signup_and_login(client)
+    invitee = random_email()
+
+    # Patch below send_email so its own result log line runs.
+    with (
+        patch("emails.message.Message.send") as smtp_send,
+        caplog.at_level(logging.DEBUG),
+    ):
+        r = _invite(client, headers, invitee)
+
+    assert r.status_code == 200
+    assert smtp_send.call_args.kwargs["to"] == invitee
+    assert "send email result" in caplog.text
+    assert invitee not in caplog.text
+    db.expire_all()
+    for table in SQLModel.metadata.sorted_tables:
+        for row in db.exec(select(table)).all():  # type: ignore[call-overload]
+            assert invitee not in str(row)
+
+
+def test_invite_to_registered_address_gets_same_response(
+    client: TestClient,
+) -> None:
+    registered_email = random_email()
+    _signup_and_login(client, registered_email)
+    _, headers = _signup_and_login(client)
+
+    with patch("app.api.routes.onboarding.send_email") as send_email:
+        to_unknown = _invite(client, headers, random_email())
+        to_registered = _invite(client, headers, registered_email)
+
+    assert to_registered.status_code == to_unknown.status_code == 200
+    assert to_registered.json() == to_unknown.json()
+    assert send_email.call_count == 2
+
+
+def test_invite_without_onboarding_record_is_not_found(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    with patch("app.api.routes.onboarding.send_email") as send_email:
+        r = _invite(client, normal_user_token_headers, random_email())
+
+    assert r.status_code == 404
+    assert r.json() == {"detail": "Onboarding not found"}
+    send_email.assert_not_called()
+
+
+def test_invite_requires_authentication(client: TestClient) -> None:
+    with patch("app.api.routes.onboarding.send_email") as send_email:
+        r = client.post(
+            f"{settings.API_V1_STR}/onboarding/invite",
+            json={"email": random_email()},
+        )
+
+    assert r.status_code in (401, 403)
+    send_email.assert_not_called()

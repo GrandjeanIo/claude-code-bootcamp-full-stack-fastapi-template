@@ -137,6 +137,16 @@ export type NewPassword = {
 };
 
 /**
+ * OnboardingInvite
+ */
+export type OnboardingInvite = {
+    /**
+     * Email
+     */
+    email: string;
+};
+
+/**
  * OnboardingPublic
  */
 export type OnboardingPublic = {
@@ -958,6 +968,31 @@ export type onboardingReadOnboardingMeResponses = {
 };
 
 export type onboardingReadOnboardingMeResponse = onboardingReadOnboardingMeResponses[keyof onboardingReadOnboardingMeResponses];
+
+export type onboardingSendInviteData = {
+    body: OnboardingInvite;
+    path?: never;
+    query?: never;
+    url: '/api/v1/onboarding/invite';
+};
+
+export type onboardingSendInviteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type onboardingSendInviteError = onboardingSendInviteErrors[keyof onboardingSendInviteErrors];
+
+export type onboardingSendInviteResponses = {
+    /**
+     * Successful Response
+     */
+    200: Message;
+};
+
+export type onboardingSendInviteResponse = onboardingSendInviteResponses[keyof onboardingSendInviteResponses];
 
 export type privateCreateUserData = {
     body: PrivateUserCreate;
