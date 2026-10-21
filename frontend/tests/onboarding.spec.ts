@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test"
+import { createUser } from "./utils/privateApi"
 import { randomEmail, randomItemTitle, randomPassword } from "./utils/random"
-import { logInUser, logOutUser } from "./utils/user"
+import { logInUser, logOutUser, signUpNewUser } from "./utils/user"
 
 const steps = {
   firstItem: "Create your first item",
@@ -126,5 +127,92 @@ test.describe("Onboarding checklist", () => {
       page.getByText("Welcome back, nice to see you again!"),
     ).toBeVisible()
     await expect(checklist(page)).not.toBeVisible()
+  })
+})
+
+const understatedNote = "The completion rate may be understated"
+
+const localDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+
+const daysAgo = (days: number) => {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return d
+}
+
+test.describe("Onboarding stats page", () => {
+  test("Superuser opens the stats page from the sidebar", async ({ page }) => {
+    await page.goto("/")
+    await page.getByRole("link", { name: "Onboarding" }).click()
+
+    await expect(page).toHaveURL(/\/onboarding$/)
+    await expect(
+      page.getByRole("heading", { name: "Onboarding" }),
+    ).toBeVisible()
+  })
+
+  test("Defaults to the last 30 days and shows the three numbers", async ({
+    page,
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    })
+    const newUser = await context.newPage()
+    await signUpNewUser(newUser, "Stats User", randomEmail(), randomPassword())
+    await context.close()
+
+    await page.goto("/onboarding")
+
+    await expect(page.getByLabel("From")).toHaveValue(localDate(daysAgo(30)))
+    await expect(page.getByLabel("To")).toHaveValue(localDate(new Date()))
+    await expect(page.getByTestId("stat-registered")).toHaveText(/^[1-9]\d*$/)
+    await expect(page.getByTestId("stat-completed")).toHaveText(/^\d+$/)
+    await expect(page.getByTestId("stat-rate")).toHaveText(/^\d+(\.\d)?%$/)
+  })
+
+  test("Changing the date range updates the numbers", async ({ page }) => {
+    await page.goto("/onboarding")
+    await expect(page.getByTestId("stat-registered")).toHaveText(/^[1-9]\d*$/)
+
+    await page.getByLabel("From").fill("2000-01-01")
+    await page.getByLabel("To").fill("2000-01-31")
+
+    await expect(page.getByTestId("stat-registered")).toHaveText("0")
+    await expect(page.getByTestId("stat-completed")).toHaveText("0")
+    await expect(page.getByTestId("stat-rate")).toHaveText("0%")
+  })
+
+  test("Shows the understated note only for windows ending within 7 days", async ({
+    page,
+  }) => {
+    await page.goto("/onboarding")
+    await expect(page.getByText(understatedNote)).toBeVisible()
+
+    await page.getByLabel("To").fill(localDate(daysAgo(10)))
+    await expect(page.getByText(understatedNote)).not.toBeVisible()
+
+    await page.getByLabel("To").fill(localDate(daysAgo(3)))
+    await expect(page.getByText(understatedNote)).toBeVisible()
+  })
+})
+
+test.describe("Onboarding stats access control", () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test("Normal user sees no link and cannot open the page", async ({
+    page,
+  }) => {
+    const email = randomEmail()
+    const password = randomPassword()
+    await createUser({ email, password })
+    await logInUser(page, email, password)
+
+    await expect(page.getByRole("link", { name: "Onboarding" })).toHaveCount(0)
+
+    await page.goto("/onboarding")
+    await expect(page).not.toHaveURL(/\/onboarding/)
+    await expect(page.getByTestId("stat-registered")).not.toBeVisible()
   })
 })
