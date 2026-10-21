@@ -1,3 +1,6 @@
+from datetime import UTC, datetime
+from typing import Any
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -211,3 +214,75 @@ def test_saving_same_name_does_not_mark_name_edited(
     _patch_me(client, headers, {"full_name": "Ada Lovelace"})
 
     assert _onboarding_rows(db, user_id)[0].name_edited_at is None
+
+
+def _get_onboarding_me(client: TestClient, headers: dict[str, str]) -> Any:
+    return client.get(f"{settings.API_V1_STR}/onboarding/me", headers=headers)
+
+
+def test_onboarding_me_for_fresh_signup_has_no_steps_done(client: TestClient) -> None:
+    _, headers = _signup_and_login(client)
+
+    r = _get_onboarding_me(client, headers)
+
+    assert r.status_code == 200
+    assert r.json() == {
+        "first_item": False,
+        "name_edited": False,
+        "invite_sent": False,
+        "completed": False,
+    }
+
+
+def test_onboarding_me_shows_item_and_name_steps(client: TestClient) -> None:
+    _, headers = _signup_and_login(client)
+    _create_item(client, headers)
+    _patch_me(client, headers, {"full_name": "Ada Lovelace"})
+
+    r = _get_onboarding_me(client, headers)
+
+    assert r.status_code == 200
+    assert r.json() == {
+        "first_item": True,
+        "name_edited": True,
+        "invite_sent": False,
+        "completed": False,
+    }
+
+
+def test_onboarding_me_is_completed_when_all_steps_done(
+    client: TestClient, db: Session
+) -> None:
+    user_id, headers = _signup_and_login(client)
+    # No invite route yet: record the invite step directly.
+    onboarding = _onboarding_rows(db, user_id)[0]
+    onboarding.invite_sent_at = datetime.now(UTC)
+    db.add(onboarding)
+    db.commit()
+    _create_item(client, headers)
+    _patch_me(client, headers, {"full_name": "Ada Lovelace"})
+
+    r = _get_onboarding_me(client, headers)
+
+    assert r.status_code == 200
+    assert r.json() == {
+        "first_item": True,
+        "name_edited": True,
+        "invite_sent": True,
+        "completed": True,
+    }
+
+
+def test_onboarding_me_without_record_is_not_found(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    r = _get_onboarding_me(client, normal_user_token_headers)
+
+    assert r.status_code == 404
+    assert r.json() == {"detail": "Onboarding not found"}
+
+
+def test_onboarding_me_requires_authentication(client: TestClient) -> None:
+    r = client.get(f"{settings.API_V1_STR}/onboarding/me")
+
+    assert r.status_code in (401, 403)

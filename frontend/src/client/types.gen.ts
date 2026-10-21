@@ -137,6 +137,28 @@ export type NewPassword = {
 };
 
 /**
+ * OnboardingPublic
+ */
+export type OnboardingPublic = {
+    /**
+     * First Item
+     */
+    first_item: boolean;
+    /**
+     * Name Edited
+     */
+    name_edited: boolean;
+    /**
+     * Invite Sent
+     */
+    invite_sent: boolean;
+    /**
+     * Completed
+     */
+    completed: boolean;
+};
+
+/**
  * PrivateUserCreate
  */
 export type PrivateUserCreate = {
@@ -920,6 +942,22 @@ export type itemsUpdateItemResponses = {
 };
 
 export type itemsUpdateItemResponse = itemsUpdateItemResponses[keyof itemsUpdateItemResponses];
+
+export type onboardingReadOnboardingMeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/onboarding/me';
+};
+
+export type onboardingReadOnboardingMeResponses = {
+    /**
+     * Successful Response
+     */
+    200: OnboardingPublic;
+};
+
+export type onboardingReadOnboardingMeResponse = onboardingReadOnboardingMeResponses[keyof onboardingReadOnboardingMeResponses];
 
 export type privateCreateUserData = {
     body: PrivateUserCreate;

@@ -124,6 +124,13 @@ class Onboarding(SQLModel, table=True):
     completed_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
+class OnboardingPublic(SQLModel):
+    first_item: bool
+    name_edited: bool
+    invite_sent: bool
+    completed: bool
+
+
 # Generic message
 class Message(SQLModel):
     message: str
