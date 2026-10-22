@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime
 
 from pydantic import EmailStr
+from sqlalchemy import DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -103,6 +104,41 @@ class ItemPublic(ItemBase):
 class ItemsPublic(SQLModel):
     data: list[ItemPublic]
     count: int
+
+
+# Per-user onboarding progress, created only at public signup
+class Onboarding(SQLModel, table=True):
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", primary_key=True, ondelete="CASCADE"
+    )
+    first_item_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)
+    )
+    name_edited_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)
+    )
+    invite_sent_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)
+    )
+    invite_count: int = 0
+    completed_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+
+
+class OnboardingPublic(SQLModel):
+    first_item: bool
+    name_edited: bool
+    invite_sent: bool
+    completed: bool
+
+
+class OnboardingInvite(SQLModel):
+    email: EmailStr = Field(max_length=255)
+
+
+class OnboardingStats(SQLModel):
+    registered: int
+    completed_within_7d: int
+    completion_rate: float
 
 
 # Generic message

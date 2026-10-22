@@ -6,6 +6,7 @@ from typing import Any
 
 import emails
 import jwt
+from emails.backend.response import SMTPResponse
 from jinja2 import Template
 from jwt.exceptions import InvalidTokenError
 
@@ -37,6 +38,25 @@ def send_email(
     subject: str = "",
     html_content: str = "",
 ) -> None:
+    response = _deliver_email(
+        email_to=email_to, subject=subject, html_content=html_content
+    )
+    logger.info(f"send email result: {response}")
+
+
+def send_invite_email(*, email_to: str, subject: str, html_content: str) -> bool:
+    """
+    Send an invite and report whether the server accepted it. Logs the status
+    code only: the server's reply text can echo the invited address.
+    """
+    response = _deliver_email(
+        email_to=email_to, subject=subject, html_content=html_content
+    )
+    logger.info(f"send invite email status: {response.status_code}")
+    return response.status_code == 250
+
+
+def _deliver_email(*, email_to: str, subject: str, html_content: str) -> SMTPResponse:
     assert settings.emails_enabled, "no provided configuration for email variables"
     assert settings.EMAILS_FROM_EMAIL  # For type checker
     message = emails.message.Message(
@@ -53,8 +73,8 @@ def send_email(
         smtp_options["user"] = settings.SMTP_USER
     if settings.SMTP_PASSWORD:
         smtp_options["password"] = settings.SMTP_PASSWORD
-    response = message.send(to=email_to, smtp=smtp_options)
-    logger.info(f"send email result: {response}")
+    response: SMTPResponse = message.send(to=email_to, smtp=smtp_options)
+    return response
 
 
 def generate_test_email(email_to: str) -> EmailData:
@@ -97,6 +117,19 @@ def generate_new_account_email(
             "password": password,
             "email": email_to,
             "link": settings.FRONTEND_HOST,
+        },
+    )
+    return EmailData(html_content=html_content, subject=subject)
+
+
+def generate_invite_email() -> EmailData:
+    project_name = settings.PROJECT_NAME
+    subject = f"{project_name} - You're invited"
+    html_content = render_email_template(
+        template_name="invite.html",
+        context={
+            "project_name": settings.PROJECT_NAME,
+            "link": f"{settings.FRONTEND_HOST}/signup",
         },
     )
     return EmailData(html_content=html_content, subject=subject)
