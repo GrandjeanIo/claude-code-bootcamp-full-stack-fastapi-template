@@ -49,3 +49,6 @@ The login form gets a "Remember me" checkbox, off by default. Checked, login ret
 
 ## Tickets
 <!-- filled by /to-tickets -->
+- FAS-9 https://linear.app/grandjean/issue/FAS-9/login-endpoint-honours-remember-me
+- FAS-10 https://linear.app/grandjean/issue/FAS-10/remember-me-checkbox-decides-where-the-session-lives
+- FAS-11 https://linear.app/grandjean/issue/FAS-11/checked-remember-me-keeps-users-logged-in-for-30-days
