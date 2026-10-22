@@ -41,11 +41,11 @@ const useAuth = () => {
     },
   })
 
-  const login = async ({ remember_me, ...body }: LoginData) => {
+  const login = async (data: LoginData) => {
     const response = await LoginService.loginAccessToken({
-      body,
+      body: data,
     })
-    setAccessToken(response.data.access_token, remember_me)
+    setAccessToken(response.data.access_token, data.remember_me)
   }
 
   const loginMutation = useMutation({
