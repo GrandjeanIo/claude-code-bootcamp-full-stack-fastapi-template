@@ -9,6 +9,10 @@ export type ClientOptions = {
  */
 export type Body_login_login_access_token = {
     /**
+     * Remember Me
+     */
+    remember_me?: boolean;
+    /**
      * Grant Type
      */
     grant_type?: string | null;
