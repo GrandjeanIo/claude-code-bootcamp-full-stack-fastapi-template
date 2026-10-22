@@ -1,11 +1,14 @@
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
+import jwt
+import pytest
 from fastapi.testclient import TestClient
 from pwdlib.hashers.bcrypt import BcryptHasher
 from sqlmodel import Session
 
 from app.core.config import settings
-from app.core.security import get_password_hash, verify_password
+from app.core.security import ALGORITHM, get_password_hash, verify_password
 from app.crud import create_user
 from app.models import User, UserCreate
 from app.utils import generate_password_reset_token
@@ -23,6 +26,43 @@ def test_get_access_token(client: TestClient) -> None:
     assert r.status_code == 200
     assert "access_token" in tokens
     assert tokens["access_token"]
+
+
+def _token_expiry(token: str) -> datetime:
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+    return datetime.fromtimestamp(payload["exp"], tz=UTC)
+
+
+def _assert_expires_in(token: str, expected: timedelta) -> None:
+    remaining = _token_expiry(token) - datetime.now(UTC)
+    assert abs(remaining - expected) < timedelta(minutes=1)
+
+
+def test_get_access_token_with_remember_me_expires_in_30_days(
+    client: TestClient,
+) -> None:
+    login_data = {
+        "username": settings.FIRST_SUPERUSER,
+        "password": settings.FIRST_SUPERUSER_PASSWORD,
+        "remember_me": "true",
+    }
+    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
+    assert r.status_code == 200
+    _assert_expires_in(r.json()["access_token"], timedelta(days=30))
+
+
+@pytest.mark.parametrize("remember_me", [{}, {"remember_me": "false"}])
+def test_get_access_token_without_remember_me_expires_in_8_days(
+    client: TestClient, remember_me: dict[str, str]
+) -> None:
+    login_data = {
+        "username": settings.FIRST_SUPERUSER,
+        "password": settings.FIRST_SUPERUSER_PASSWORD,
+        **remember_me,
+    }
+    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
+    assert r.status_code == 200
+    _assert_expires_in(r.json()["access_token"], timedelta(days=8))
 
 
 def test_get_access_token_incorrect_password(client: TestClient) -> None:
