@@ -12,11 +12,12 @@ import { client } from "./client/client.gen"
 import { ThemeProvider } from "./components/theme-provider"
 import { Toaster } from "./components/ui/sonner"
 import "./index.css"
+import { clearAccessToken, getAccessToken } from "./lib/token"
 import { routeTree } from "./routeTree.gen"
 
 client.setConfig({
   baseURL: import.meta.env.VITE_API_URL ?? "",
-  auth: () => localStorage.getItem("access_token") || "",
+  auth: () => getAccessToken() || "",
 })
 
 const handleApiError = (error: Error) => {
@@ -24,7 +25,7 @@ const handleApiError = (error: Error) => {
     error instanceof AxiosError &&
     [401, 403].includes(error.response?.status ?? 0)
   ) {
-    localStorage.removeItem("access_token")
+    clearAccessToken()
     window.location.href = "/login"
   }
 }
